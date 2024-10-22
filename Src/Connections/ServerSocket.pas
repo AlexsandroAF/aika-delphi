@@ -5,7 +5,7 @@ interface
 uses Winsock2, Windows, PlayerThread, Player, BaseMob, NPC, PlayerData,
   UpdateThreads, MiscData, PartyData, Generics.Collections, AnsiStrings,
   ConnectionsThread, GuildData, SQL, MOB, PET, Objects, classes, Math,
-  CastleSiege;
+  CastleSiege, Dungeon;
 {$OLDTYPELAYOUT ON}
 
 type
@@ -33,6 +33,12 @@ type
     PETS: Array [9148 .. 10147] of TPet; // reserved 9148-10147
     OBJ: Array [10148 .. 10239] of TOBJ;
     Prans: Array [10241 .. 10642] of Integer;
+    { Dungeon}
+    DGUrsula: Array [0 .. 0] of TDungeon; //0..2
+    DGEvgInf: Array [0 .. 0] of TDungeon;
+    DGEvgSup: Array [0 .. 0] of TDungeon;
+    DGMines1: Array [0 .. 0] of TDungeon;
+    DGKinary: Array [0 .. 0] of TDungeon;
     Parties: ARRAY [1 .. 30] OF TParty;
     Devires: Array [0 .. 4] of TDevir;
     DevirNpc: Array [3335 .. 3339] of TNpc;
@@ -220,6 +226,13 @@ begin
   ZeroMemory(@Self.Players, sizeof(Self.Players));
   ZeroMemory(@Self.MOBS, sizeof(Self.MOBS));
   ZeroMemory(@Self.Parties, sizeof(Self.Parties));
+  { Dungeon}
+  ZeroMemory(@Self.DGUrsula, sizeof(TDungeon));
+  ZeroMemory(@Self.DGEvgInf, sizeof(TDungeon));
+  ZeroMemory(@Self.DGEvgSup, sizeof(TDungeon));
+  ZeroMemory(@Self.DGMines1, sizeof(TDungeon));
+  ZeroMemory(@Self.DGKinary, sizeof(TDungeon));
+
   Self.StartPartys;
   Self.StartMobs;
   CastleSiegeHandler := TCastleSiege.Create();
@@ -1346,8 +1359,9 @@ begin
             String(Player.Account.Header.userName) + '] ' + DateTimeToStr(now) +
             '.', TLogType.Error);
       end;
-    //$334:
-      {try
+      { Dungeon Packed}
+    $334:
+      try
         TPacketHandlers.RequestEnterDungeon(Player, Buffer);
       except
         on E: Exception do
@@ -1355,7 +1369,7 @@ begin
             E.Message + ' : ' + chr(13) + E.StackTrace + '] username[' +
             String(Player.Account.Header.userName) + '] ' + DateTimeToStr(now) +
             '.', TLogType.Error);
-      end; }
+      end;
     $336:
       try
         TPacketHandlers.CollectMapItem(Player, Buffer);

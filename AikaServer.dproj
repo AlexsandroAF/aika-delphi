@@ -251,6 +251,7 @@ begin
         <DCCReference Include="Src\Items\ItemBoxFunctions.pas"/>
         <DCCReference Include="Src\Items\ItemConjuntFunctions.pas"/>
         <DCCReference Include="Src\Items\ItemSkillFunctions.pas"/>
+        <DCCReference Include="Src\Dungeons\Dungeon.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

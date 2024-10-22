@@ -48,68 +48,7 @@ uses
   EntityFriend in 'Src\Data\Entity\EntityFriend.pas',
   SendPacketForm in 'Src\Forms\SendPacketForm.pas' {frmSendPacket},
   Nation in 'Src\Nation\Nation.pas',
-  PingBackForm in 'Src\Forms\PingBackForm.pas' {frmPingback: DWORD): BOOL; stdcall;
-var
-  i: BYTE;
-begin
-  Result := False;
-  if (dwCtrlType = CTRL_CLOSE_EVENT) or (dwCtrlType = CTRL_LOGOFF_EVENT) or
-    (dwCtrlType = CTRL_SHUTDOWN_EVENT) then
-  begin
-    if not(ServerHasClosed) then
-    begin
-      TFunctions.SaveGuilds;
-      for i := Low(Nations) to High(Nations) do
-      begin
-        Nations[i].SaveNation;
-      end;
-      for i := Low(Servers) to High(Servers) do
-      begin
-        Servers[i].CloseServer;
-      end;
-      Logger.Write('Server Closed Succesfully!', TLogType.ServerStatus);
-    end;
-    Result := True;
-  end;
-end;
-
-var
-  InputStr: string;
-  Uptime: TDateTime;
-  timeinit: Integer;
-  CreateSendPacketForm: Boolean = True;
-  i: Integer;
-  cmdto: String;
-
-begin
-  Logger := TLog.Create;
-  SetConsoleTitleA('Aika Server');
-
-  try
-    Uptime := Now;
-    WebServerClosed := False;
-    xServerClosed := False;
-    TLoad.InitCharacters;
-    TLoad.InitItemList;
-    TLoad.InitSkillData;
-    TLoad.InitSetItem;
-    TLoad.InitConjunts;
-    TLoad.InitReinforce;
-    TLoad.InitPremiumItems;
-    TLoad.InitExpList;
-    TLoad.InitPranExpList;
-    TLoad.InitServerConf;
-    TLoad.InitServerList;
-    TLoad.LoadNPCOptions;
-    TLoad.InitMapsData;
-    TLoad.InitScrollPositions;
-    TLoad.InitQuestList;
-    TLoad.InitQuests;
-    TLoad.InitTitles;
-    TLoad.InitDropList2;
-    TLoad.InitRecipes;
-    TLoad.InitMakeItems;
-    Logger.Space; { Space},
+  PingBackForm in 'Src\Forms\PingBackForm.pas' {frmPingback:},
   AuctionFunctions in 'Src\Auction\AuctionFunctions.pas',
   CharacterAutcion in 'Src\Auction\CharacterAutcion.pas',
   Objects in 'Src\Mob\Objects.pas',
@@ -118,32 +57,42 @@ begin
   ItemGoldFunctions in 'Src\Items\ItemGoldFunctions.pas',
   ItemBoxFunctions in 'Src\Items\ItemBoxFunctions.pas',
   ItemConjuntFunctions in 'Src\Items\ItemConjuntFunctions.pas',
-  ItemSkillFunctions in 'Src\Items\ItemSkillFunctions.pas';
+  ItemSkillFunctions in 'Src\Items\ItemSkillFunctions.pas',
+  Dungeon in 'Src\Dungeons\Dungeon.pas';
 
 function ConsoleHandler(dwCtrlType: DWORD): BOOL; stdcall;
 var
-  i: BYTE;
+  i: Integer;
 begin
   Result := False;
-  if (dwCtrlType = CTRL_CLOSE_EVENT) or (dwCtrlType = CTRL_LOGOFF_EVENT) or
-    (dwCtrlType = CTRL_SHUTDOWN_EVENT) then
+  if (dwCtrlType in [CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT]) then
   begin
     if not(ServerHasClosed) then
     begin
-      TFunctions.SaveGuilds;
-      for i := Low(Nations) to High(Nations) do
-      begin
-        Nations[i].SaveNation;
+      try
+        TFunctions.SaveGuilds;
+
+        for i := Low(Nations) to High(Nations) do
+        begin
+          Nations[i].SaveNation;
+        end;
+
+        for i := Low(Servers) to High(Servers) do
+        begin
+          Servers[i].CloseServer;
+        end;
+
+        Logger.Write('Server Closed Successfully!', TLogType.ServerStatus);
+      except
+        on E: Exception do
+          Logger.Write('Error during server closure: ' + E.Message, TLogType.Error);
       end;
-      for i := Low(Servers) to High(Servers) do
-      begin
-        Servers[i].CloseServer;
-      end;
-      Logger.Write('Server Closed Succesfully!', TLogType.ServerStatus);
     end;
     Result := True;
   end;
 end;
+
+
 
 var
   InputStr: string;
@@ -201,6 +150,16 @@ begin
         Servers[i].UpdateReliquareEffects();
       end;
 
+    end;
+
+
+       // Inicialização opcional da GUI
+    if (CreateSendPacketForm) then
+    begin
+      Application.Initialize;
+      Application.CreateForm(TfrmSendPacket, frmSendPacket);
+  Application.CreateForm(TfrmPingback, frmPingback);
+  Application.Run;
     end;
 
     timeinit := MilliSecondsBetween(Now, Uptime);

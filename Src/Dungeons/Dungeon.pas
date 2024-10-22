@@ -1,4 +1,4 @@
-{unit Dungeon;
+unit Dungeon;
 
 interface
 
@@ -688,6 +688,7 @@ type
     MOBS: TMobDungeonStruct; // até 45 tipos de mobs diferentes
     MobsDrop: TDungeonMobDrop;
     NPCS: Array [2600 .. 2609] of TNpc; // até 10 npcs dentro da dg
+
   end;
 
 type
@@ -1292,4 +1293,4 @@ begin
     Sleep(FDelay);
   end;
 end;
-end.                                           }
+end.

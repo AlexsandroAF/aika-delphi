@@ -6,7 +6,7 @@ interface
 
 uses BaseMob, PlayerData, Winsock2, Windows, System.Threading, SysUtils,
   PlayerThread, PartyData, MiscData, AnsiStrings, Generics.Collections,
-  GuildData, Vcl.Dialogs, SQL, Data.DB, MOB, Classes, FilesData, EntityFriend,Math;
+  GuildData, Vcl.Dialogs, SQL, Data.DB, MOB, Classes, FilesData, EntityFriend,Math,Dungeon;
 {$OLDTYPELAYOUT ON}
 {$REGION 'Duel Thread'}
 
@@ -298,12 +298,12 @@ type
     { Event Item }
     procedure GetAllEventItems();
     function DiaryItemAvaliable(): Boolean;
-    { Dungeon
+    { Dungeon }
     procedure SendDungeonLobby(InParty: Boolean; Dungeon, Dificult: BYTE);
     function GetFreeDungeonInstance(): BYTE;
     procedure CreateDungeonInstance(InParty: Boolean; Dungeon, Dificult: BYTE);
     procedure SendSpawnMobDungeon(MOB: PMobsStructDungeonInstance);
-    procedure SendRemoveMobDungeon(MOB: PMobsStructDungeonInstance);}
+    procedure SendRemoveMobDungeon(MOB: PMobsStructDungeonInstance);
     { Nation }
     function IsMarshal(): Boolean;
     function IsArchon(): Boolean;
@@ -6421,14 +6421,14 @@ procedure TPlayer.CharInfoResponse(Index: WORD);
 var
   Packet: TCharInfoResponsePacket;
   FPlayer: PPlayer;
-  // FCharacter: PCharacter;
+  FCharacter: PCharacter;
 begin
   if (Servers[Self.ChannelIndex].Players[Index].SocketClosed) then
     Exit;
   ZeroMemory(@Packet, sizeof(Packet));
   FPlayer := @Servers[Self.ChannelIndex].Players[Index];
-  // FCharacter := @Servers[Self.ChannelIndex].Players[Index]
-  // .Base.PlayerCharacter.Base;
+  FCharacter := @Servers[Self.ChannelIndex].Players[Index]
+  .Base.PlayerCharacter.Base;
   Packet.Header.size := sizeof(Packet);
   Packet.Header.Code := $19E;
   System.AnsiStrings.StrPLCopy(Packet.Nick, FPlayer.Base.Character.Name, 16);
@@ -6442,7 +6442,7 @@ begin
     Packet.GuildName := 'Nenhuma';
   // FPlayer.Base.GetCurrentScore;
   Packet.Classe := FPlayer.Base.Character.ClassInfo;
-  // Packet.Na��o := FCharacter^.Nation; apaguei como teste
+  Packet.Nacao := FCharacter^.Nation; // apaguei como teste
   Packet.Nacao := FPlayer.Base.Character.Nation; // Character^.Nation * 4096
   Packet.Infamia := FPlayer.Base.PlayerCharacter.Base.CurrentScore.Infamia;
   Packet.Honra := FPlayer.Base.PlayerCharacter.Base.CurrentScore.Honor;
@@ -9779,6 +9779,1386 @@ begin
   Self.SendPacket(Packet, Packet.Header.size);
 end;
 {$ENDREGION}
+{$REGION 'Dungeons'}
+
+procedure TPlayer.SendDungeonLobby(InParty: Boolean; Dungeon, Dificult: BYTE);
+var
+  Packet: TSendPlayersLobbyDungeon;
+  i, Cnt: WORD;
+begin
+  ZeroMemory(@Packet, sizeof(Packet));
+  Packet.Header.size := sizeof(Packet);
+  Packet.Header.Code := $145;
+  Packet.Header.Index := Self.Base.clientId;
+
+  Packet.Dungeon := Dungeon;
+  Packet.Dificult := Dificult;
+
+  if (InParty) then
+  begin
+    // verificar o negocio de raids
+
+    Cnt := 0;
+
+    for i in Self.Party.Members do
+    begin
+      Packet.PlayersParty1[Cnt] := Servers[Self.ChannelIndex].Players[i]
+        .Base.clientId;
+      Packet.UnkPlayersRecord[Cnt] := Cnt;
+      Servers[Self.ChannelIndex].Players[i].DungeonLobbyIndex := Dungeon;
+      Servers[Self.ChannelIndex].Players[i].DungeonLobbyDificult := Dificult;
+      Inc(Cnt);
+    end;
+
+    Self.Party.SendToParty(Packet, Packet.Header.size);
+  end
+  else
+  begin
+    Packet.PlayersParty1[0] := Self.Base.clientId;
+    Packet.UnkPlayersRecord[0] := 0;
+    Self.DungeonLobbyIndex := Dungeon;
+    Self.DungeonLobbyDificult := Dificult;
+
+    Self.SendPacket(Packet, Packet.Header.size);
+  end;
+end;
+
+function TPlayer.GetFreeDungeonInstance(): BYTE;
+var
+  i: BYTE;
+begin
+  Result := 255;
+  for i := Low(DungeonInstances) to High(DungeonInstances) do
+  begin
+    if (DungeonInstances[i].Index = 0) then
+    begin
+      Result := i;
+      Break;
+    end;
+  end;
+end;
+
+procedure TPlayer.CreateDungeonInstance(InParty: Boolean;
+Dungeon, Dificult: BYTE);
+var
+  i, J, k, Cnt: WORD;
+  FreeId: BYTE;
+begin
+  /// /example for clear list
+  /// //Servers[Self.ChannelIndex].Players[i].Base.ClearTargetList
+  if (InParty) then
+  begin
+    case Dungeon of
+      DUNGEON_ZANTORIAN_CITADEL:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGUrsula[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            if (i = Servers[Self.ChannelIndex].Players[i].Party.Members.First)
+            then
+            begin
+              FreeId := Servers[Self.ChannelIndex].Players[i]
+                .GetFreeDungeonInstance;
+              if (FreeId = 255) then
+              begin
+                Self.SendClientMessage('Dungeon Instances Full.');
+                Exit;
+              end;
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+                .DungeonInstanceID := FreeId;
+              DungeonInstances[FreeId].Index := FreeId;
+              DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+                .Players[i].Party;
+              DungeonInstances[FreeId].CreateTime := Now;
+              DungeonInstances[FreeId].DungeonID := Dungeon;
+              DungeonInstances[FreeId].Dificult := Dificult;
+              Cnt := 1;
+              for J := Low(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGUrsula
+                [Dificult].MOBS.TMobS) do
+              begin
+                for k := 0 to 49 do
+                begin
+                  if (Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].MobsP[k].Base.clientId = 0) then
+                    Continue;
+                  DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].IntName;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].Base.clientId, Self.ChannelIndex);
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].InitHP;
+                  DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                    DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                  DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].InitPos;
+                  DungeonInstances[FreeId].MOBS[Cnt]
+                    .Base.PlayerCharacter.LastPos := DungeonInstances[FreeId]
+                    .MOBS[Cnt].Position;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].MobLevel;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].MobExp;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].MobType;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS[J]
+                    .MobElevation;
+                  DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].Cabeca;
+                  DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                    .MOBS.TMobS[J].Perna;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].FisAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].MagAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].FisDef;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                    Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].MagDef;
+                  Move(Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                  case Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                    [J].DungeonDropIndex of
+                    11, 21, 31:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                          .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                          [Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                          .MobsDrop.SemCoroa));
+                      end;
+                    12, 22, 32:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                          .MobsDrop.CoroaPrata,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                          .MobsDrop.CoroaPrata));
+                      end;
+                    13, 23, 33:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                          .MobsDrop.CoroaDourada,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                          .MobsDrop.CoroaDourada));
+                      end;
+                  end;
+                  Inc(Cnt);
+                end;
+              end;
+              DungeonInstances[FreeId].InstanceOnline := True;
+              DungeonInstances[FreeId].MainThread :=
+                TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+          end;
+        end;
+      DUNGEON_MARAUDER_HOLD:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            if (i = Servers[Self.ChannelIndex].Players[i].Party.Members.First)
+            then
+            begin
+              FreeId := Servers[Self.ChannelIndex].Players[i]
+                .GetFreeDungeonInstance;
+              if (FreeId = 255) then
+              begin
+                Self.SendClientMessage('Dungeon Instances Full.');
+                Exit;
+              end;
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+                .DungeonInstanceID := FreeId;
+              DungeonInstances[FreeId].Index := FreeId;
+              DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+                .Players[i].Party;
+              DungeonInstances[FreeId].CreateTime := Now;
+              DungeonInstances[FreeId].DungeonID := Dungeon;
+              DungeonInstances[FreeId].Dificult := Dificult;
+              Cnt := 1;
+              for J := Low(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGEvgInf
+                [Dificult].MOBS.TMobS) do
+              begin
+                for k := 0 to 49 do
+                begin
+                  if (Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].MobsP[k].Base.clientId = 0) then
+                    Continue;
+                  DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].IntName;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].Base.clientId, Self.ChannelIndex);
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].InitHP;
+                  DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                    DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                  DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].InitPos;
+                  DungeonInstances[FreeId].MOBS[Cnt]
+                    .Base.PlayerCharacter.LastPos := DungeonInstances[FreeId]
+                    .MOBS[Cnt].Position;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].MobLevel;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].MobExp;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].MobType;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS[J]
+                    .MobElevation;
+                  DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].Cabeca;
+                  DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                    .MOBS.TMobS[J].Perna;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].FisAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].MagAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].FisDef;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                    Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].MagDef;
+                  Move(Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                  case Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                    [J].DungeonDropIndex of
+                    41, 51, 61:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                          .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                          [Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                          .MobsDrop.SemCoroa));
+                      end;
+                    42, 52, 62:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                          .MobsDrop.CoroaPrata,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                          .MobsDrop.CoroaPrata));
+                      end;
+                    43, 53, 63:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                          .MobsDrop.CoroaDourada,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                          .MobsDrop.CoroaDourada));
+                      end;
+                  end;
+                  Inc(Cnt);
+                end;
+              end;
+              DungeonInstances[FreeId].InstanceOnline := True;
+              DungeonInstances[FreeId].MainThread :=
+                TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+          end;
+        end;
+      DUNGEON_MARAUDER_CABIN:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            if (i = Servers[Self.ChannelIndex].Players[i].Party.Members.First)
+            then
+            begin
+              FreeId := Servers[Self.ChannelIndex].Players[i]
+                .GetFreeDungeonInstance;
+              if (FreeId = 255) then
+              begin
+                Self.SendClientMessage('Dungeon Instances Full.');
+                Exit;
+              end;
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+                .DungeonInstanceID := FreeId;
+              DungeonInstances[FreeId].Index := FreeId;
+              DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+                .Players[i].Party;
+              DungeonInstances[FreeId].CreateTime := Now;
+              DungeonInstances[FreeId].DungeonID := Dungeon;
+              DungeonInstances[FreeId].Dificult := Dificult;
+              Cnt := 1;
+              for J := Low(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGEvgSup
+                [Dificult].MOBS.TMobS) do
+              begin
+                for k := 0 to 49 do
+                begin
+                  if (Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].MobsP[k].Base.clientId = 0) then
+                    Continue;
+                  DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].IntName;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].Base.clientId, Self.ChannelIndex);
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].InitHP;
+                  DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                    DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                  DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].InitPos;
+                  DungeonInstances[FreeId].MOBS[Cnt]
+                    .Base.PlayerCharacter.LastPos := DungeonInstances[FreeId]
+                    .MOBS[Cnt].Position;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].MobLevel;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].MobExp;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].MobType;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS[J]
+                    .MobElevation;
+                  DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].Cabeca;
+                  DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                    .MOBS.TMobS[J].Perna;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].FisAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].MagAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].FisDef;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                    Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].MagDef;
+                  Move(Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                  case Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                    [J].DungeonDropIndex of
+                    71, 81, 91:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                          .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                          [Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                          .MobsDrop.SemCoroa));
+                      end;
+                    72, 82, 92:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                          .MobsDrop.CoroaPrata,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                          .MobsDrop.CoroaPrata));
+                      end;
+                    73, 83, 93:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                          .MobsDrop.CoroaDourada,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                          .MobsDrop.CoroaDourada));
+                      end;
+                  end;
+                  Inc(Cnt);
+                end;
+              end;
+              DungeonInstances[FreeId].InstanceOnline := True;
+              DungeonInstances[FreeId].MainThread :=
+                TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+          end;
+        end;
+      DUNGEON_LOST_MINES:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGMines1[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            if (i = Servers[Self.ChannelIndex].Players[i].Party.Members.First)
+            then
+            begin
+              FreeId := Servers[Self.ChannelIndex].Players[i]
+                .GetFreeDungeonInstance;
+              if (FreeId = 255) then
+              begin
+                Self.SendClientMessage('Dungeon Instances Full.');
+                Exit;
+              end;
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+                .DungeonInstanceID := FreeId;
+              DungeonInstances[FreeId].Index := FreeId;
+              DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+                .Players[i].Party;
+              DungeonInstances[FreeId].CreateTime := Now;
+              DungeonInstances[FreeId].DungeonID := Dungeon;
+              DungeonInstances[FreeId].Dificult := Dificult;
+              Cnt := 1;
+              for J := Low(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGMines1
+                [Dificult].MOBS.TMobS) do
+              begin
+                for k := 0 to 49 do
+                begin
+                  if (Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].MobsP[k].Base.clientId = 0) then
+                    Continue;
+                  DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].IntName;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].Base.clientId, Self.ChannelIndex);
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].InitHP;
+                  DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                    DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                  DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].InitPos;
+                  DungeonInstances[FreeId].MOBS[Cnt]
+                    .Base.PlayerCharacter.LastPos := DungeonInstances[FreeId]
+                    .MOBS[Cnt].Position;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].MobLevel;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].MobExp;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].MobType;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS[J]
+                    .MobElevation;
+                  DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].Cabeca;
+                  DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult]
+                    .MOBS.TMobS[J].Perna;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].FisAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].MagAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].FisDef;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                    Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].MagDef;
+                  Move(Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                  case Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                    [J].DungeonDropIndex of
+                    101, 201, 301:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                          .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                          [Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                          .MobsDrop.SemCoroa));
+                      end;
+                    102, 202, 302:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                          .MobsDrop.CoroaPrata,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                          .MobsDrop.CoroaPrata));
+                      end;
+                    103, 203, 303:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                          .MobsDrop.CoroaDourada,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                          .MobsDrop.CoroaDourada));
+                      end;
+                  end;
+                  Inc(Cnt);
+                end;
+              end;
+              DungeonInstances[FreeId].InstanceOnline := True;
+              DungeonInstances[FreeId].MainThread :=
+                TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+          end;
+        end;
+      DUNGEON_KINARY_AVIARY:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGKinary[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            if (i = Servers[Self.ChannelIndex].Players[i].Party.Members.First)
+            then
+            begin
+              FreeId := Servers[Self.ChannelIndex].Players[i]
+                .GetFreeDungeonInstance;
+              if (FreeId = 255) then
+              begin
+                Self.SendClientMessage('Dungeon Instances Full.');
+                Exit;
+              end;
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+                .DungeonInstanceID := FreeId;
+              DungeonInstances[FreeId].Index := FreeId;
+              DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+                .Players[i].Party;
+              DungeonInstances[FreeId].CreateTime := Now;
+              DungeonInstances[FreeId].DungeonID := Dungeon;
+              DungeonInstances[FreeId].Dificult := Dificult;
+              Cnt := 1;
+              for J := Low(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGKinary
+                [Dificult].MOBS.TMobS) do
+              begin
+                for k := 0 to 49 do
+                begin
+                  if (Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].MobsP[k].Base.clientId = 0) then
+                    Continue;
+                  DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].IntName;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].Base.clientId, Self.ChannelIndex);
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                  DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].InitHP;
+                  DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                    DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                  DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS[J]
+                    .MobsP[k].InitPos;
+                  DungeonInstances[FreeId].MOBS[Cnt]
+                    .Base.PlayerCharacter.LastPos := DungeonInstances[FreeId]
+                    .MOBS[Cnt].Position;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].MobLevel;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].MobExp;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].MobType;
+                  DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS[J]
+                    .MobElevation;
+                  DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].Cabeca;
+                  DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult]
+                    .MOBS.TMobS[J].Perna;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].FisAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].MagAtk;
+                  DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].FisDef;
+                  DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                    Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].MagDef;
+                  Move(Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                  case Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                    [J].DungeonDropIndex of
+                    101, 201, 301:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                          .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                          [Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                          .MobsDrop.SemCoroa));
+                      end;
+                    102, 202, 302:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                          .MobsDrop.CoroaPrata,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                          .MobsDrop.CoroaPrata));
+                      end;
+                    103, 203, 303:
+                      begin
+                        Move(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                          .MobsDrop.CoroaDourada,
+                          DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                          sizeof(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                          .MobsDrop.CoroaDourada));
+                      end;
+                  end;
+                  Inc(Cnt);
+                end;
+              end;
+              DungeonInstances[FreeId].InstanceOnline := True;
+              DungeonInstances[FreeId].MainThread :=
+                TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+          end;
+        end;
+    end;
+  end
+  else
+  begin
+    if (TParty.CreateParty(Self.Base.clientId, Self.ChannelIndex)) then
+    begin
+      Self.RefreshParty;
+    end
+    else
+    begin
+      Self.SendClientMessage('Não foi possível criar o grupo.');
+      Exit;
+    end;
+    case Dungeon of
+      DUNGEON_ZANTORIAN_CITADEL:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGUrsula[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            FreeId := Servers[Self.ChannelIndex].Players[i]
+              .GetFreeDungeonInstance;
+            if (FreeId = 255) then
+            begin
+              Self.SendClientMessage('Dungeon Instances Full.');
+              Exit;
+            end;
+            Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID := FreeId;
+            DungeonInstances[FreeId].Index := FreeId;
+            DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+              .Players[i].Party;
+            DungeonInstances[FreeId].CreateTime := Now;
+            DungeonInstances[FreeId].DungeonID := Dungeon;
+            DungeonInstances[FreeId].Dificult := Dificult;
+            Cnt := 1;
+            for J := Low(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+              .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+              .MOBS.TMobS) do
+            begin
+              for k := 0 to 49 do
+              begin
+                if (Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId = 0) then
+                  Continue;
+                DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].IntName;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId, Self.ChannelIndex);
+                DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].InitHP;
+                DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].InitPos;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.PlayerCharacter.LastPos
+                  := DungeonInstances[FreeId].MOBS[Cnt].Position;
+                DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].MobLevel;
+                DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].MobExp;
+                DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].MobType;
+                DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS[J]
+                  .MobElevation;
+                DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].Cabeca;
+                DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                  .MOBS.TMobS[J].Perna;
+                DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].FisAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].MagAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].FisDef;
+                DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                  Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS
+                  [J].MagDef;
+                Move(Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS[J]
+                  .Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                case Servers[Self.ChannelIndex].DGUrsula[Dificult].MOBS.TMobS[J]
+                  .DungeonDropIndex of
+                  11, 21, 31:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                        .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                        .MobsDrop.SemCoroa));
+                    end;
+                  12, 22, 32:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                        .MobsDrop.CoroaPrata, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                        .MobsDrop.CoroaPrata));
+                    end;
+                  13, 23, 33:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                        .MobsDrop.CoroaDourada,
+                        DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGUrsula[Dificult]
+                        .MobsDrop.CoroaDourada));
+                    end;
+                end;
+                Inc(Cnt);
+              end;
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+            DungeonInstances[FreeId].InstanceOnline := True;
+            DungeonInstances[FreeId].MainThread :=
+              TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+          end;
+        end;
+      DUNGEON_MARAUDER_HOLD:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            FreeId := Servers[Self.ChannelIndex].Players[i]
+              .GetFreeDungeonInstance;
+            if (FreeId = 255) then
+            begin
+              Self.SendClientMessage('Dungeon Instances Full.');
+              Exit;
+            end;
+            Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID := FreeId;
+            DungeonInstances[FreeId].Index := FreeId;
+            DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+              .Players[i].Party;
+            DungeonInstances[FreeId].CreateTime := Now;
+            DungeonInstances[FreeId].DungeonID := Dungeon;
+            DungeonInstances[FreeId].Dificult := Dificult;
+            Cnt := 1;
+            for J := Low(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+              .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+              .MOBS.TMobS) do
+            begin
+              for k := 0 to 49 do
+              begin
+                if (Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId = 0) then
+                  Continue;
+                DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].IntName;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId, Self.ChannelIndex);
+                DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].InitHP;
+                DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].InitPos;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.PlayerCharacter.LastPos
+                  := DungeonInstances[FreeId].MOBS[Cnt].Position;
+                DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].MobLevel;
+                DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].MobExp;
+                DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].MobType;
+                DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS[J]
+                  .MobElevation;
+                DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].Cabeca;
+                DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                  .MOBS.TMobS[J].Perna;
+                DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].FisAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].MagAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].FisDef;
+                DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                  Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS
+                  [J].MagDef;
+                Move(Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS[J]
+                  .Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                case Servers[Self.ChannelIndex].DGEvgInf[Dificult].MOBS.TMobS[J]
+                  .DungeonDropIndex of
+                  41, 51, 61:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                        .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                        .MobsDrop.SemCoroa));
+                    end;
+                  42, 52, 62:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                        .MobsDrop.CoroaPrata, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                        .MobsDrop.CoroaPrata));
+                    end;
+                  43, 53, 63:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                        .MobsDrop.CoroaDourada,
+                        DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGEvgInf[Dificult]
+                        .MobsDrop.CoroaDourada));
+                    end;
+                end;
+                Inc(Cnt);
+              end;
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+            DungeonInstances[FreeId].InstanceOnline := True;
+            DungeonInstances[FreeId].MainThread :=
+              TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+          end;
+        end;
+      DUNGEON_MARAUDER_CABIN:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            FreeId := Servers[Self.ChannelIndex].Players[i]
+              .GetFreeDungeonInstance;
+            if (FreeId = 255) then
+            begin
+              Self.SendClientMessage('Dungeon Instances Full.');
+              Exit;
+            end;
+            Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID := FreeId;
+            DungeonInstances[FreeId].Index := FreeId;
+            DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+              .Players[i].Party;
+            DungeonInstances[FreeId].CreateTime := Now;
+            DungeonInstances[FreeId].DungeonID := Dungeon;
+            DungeonInstances[FreeId].Dificult := Dificult;
+            Cnt := 1;
+            for J := Low(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+              .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+              .MOBS.TMobS) do
+            begin
+              for k := 0 to 49 do
+              begin
+                if (Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId = 0) then
+                  Continue;
+                DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].IntName;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId, Self.ChannelIndex);
+                DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].InitHP;
+                DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].InitPos;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.PlayerCharacter.LastPos
+                  := DungeonInstances[FreeId].MOBS[Cnt].Position;
+                DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].MobLevel;
+                DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].MobExp;
+                DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].MobType;
+                DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS[J]
+                  .MobElevation;
+                DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].Cabeca;
+                DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                  .MOBS.TMobS[J].Perna;
+                DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].FisAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].MagAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].FisDef;
+                DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                  Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS
+                  [J].MagDef;
+                Move(Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS[J]
+                  .Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                case Servers[Self.ChannelIndex].DGEvgSup[Dificult].MOBS.TMobS[J]
+                  .DungeonDropIndex of
+                  71, 81, 91:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                        .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                        .MobsDrop.SemCoroa));
+                    end;
+                  72, 82, 92:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                        .MobsDrop.CoroaPrata, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                        .MobsDrop.CoroaPrata));
+                    end;
+                  73, 83, 93:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                        .MobsDrop.CoroaDourada,
+                        DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGEvgSup[Dificult]
+                        .MobsDrop.CoroaDourada));
+                    end;
+                end;
+                Inc(Cnt);
+              end;
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+            DungeonInstances[FreeId].InstanceOnline := True;
+            DungeonInstances[FreeId].MainThread :=
+              TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+          end;
+        end;
+      DUNGEON_LOST_MINES:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGMines1[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            FreeId := Servers[Self.ChannelIndex].Players[i]
+              .GetFreeDungeonInstance;
+            if (FreeId = 255) then
+            begin
+              Self.SendClientMessage('Dungeon Instances Full.');
+              Exit;
+            end;
+            Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID := FreeId;
+            DungeonInstances[FreeId].Index := FreeId;
+            DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+              .Players[i].Party;
+            DungeonInstances[FreeId].CreateTime := Now;
+            DungeonInstances[FreeId].DungeonID := Dungeon;
+            DungeonInstances[FreeId].Dificult := Dificult;
+            Cnt := 1;
+            for J := Low(Servers[Self.ChannelIndex].DGMines1[Dificult]
+              .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGMines1[Dificult]
+              .MOBS.TMobS) do
+            begin
+              for k := 0 to 49 do
+              begin
+                if (Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId = 0) then
+                  Continue;
+                DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].IntName;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId, Self.ChannelIndex);
+                DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].InitHP;
+                DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].InitPos;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.PlayerCharacter.LastPos
+                  := DungeonInstances[FreeId].MOBS[Cnt].Position;
+                DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].MobLevel;
+                DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].MobExp;
+                DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].MobType;
+                DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS[J]
+                  .MobElevation;
+                DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].Cabeca;
+                DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult]
+                  .MOBS.TMobS[J].Perna;
+                DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].FisAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].MagAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].FisDef;
+                DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                  Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS
+                  [J].MagDef;
+                Move(Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS[J]
+                  .Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                case Servers[Self.ChannelIndex].DGMines1[Dificult].MOBS.TMobS[J]
+                  .DungeonDropIndex of
+                  101, 201, 301:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                        .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                        .MobsDrop.SemCoroa));
+                    end;
+                  102, 202, 302:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                        .MobsDrop.CoroaPrata, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                        .MobsDrop.CoroaPrata));
+                    end;
+                  103, 203, 303:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                        .MobsDrop.CoroaDourada,
+                        DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGMines1[Dificult]
+                        .MobsDrop.CoroaDourada));
+                    end;
+                end;
+                Inc(Cnt);
+              end;
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+            DungeonInstances[FreeId].InstanceOnline := True;
+            DungeonInstances[FreeId].MainThread :=
+              TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+          end;
+        end;
+      DUNGEON_KINARY_AVIARY:
+        begin
+          for i in Self.Party.Members do
+          begin
+            Servers[Self.ChannelIndex].Players[i].Base.WalkTo
+              (Servers[Self.ChannelIndex].DGKinary[Dificult]
+              .SpawnInDungeonPosition, 70, MOVE_TELEPORT);
+            Servers[Self.ChannelIndex].Players[i].InDungeon := True;
+            Servers[Self.ChannelIndex].Players[i].DungeonID := Dungeon;
+            Servers[Self.ChannelIndex].Players[i].DungeonIDDificult := Dificult;
+            FreeId := Servers[Self.ChannelIndex].Players[i]
+              .GetFreeDungeonInstance;
+            if (FreeId = 255) then
+            begin
+              Self.SendClientMessage('Dungeon Instances Full.');
+              Exit;
+            end;
+            Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID := FreeId;
+            DungeonInstances[FreeId].Index := FreeId;
+            DungeonInstances[FreeId].Party := Servers[Self.ChannelIndex]
+              .Players[i].Party;
+            DungeonInstances[FreeId].CreateTime := Now;
+            DungeonInstances[FreeId].DungeonID := Dungeon;
+            DungeonInstances[FreeId].Dificult := Dificult;
+            Cnt := 1;
+            for J := Low(Servers[Self.ChannelIndex].DGKinary[Dificult]
+              .MOBS.TMobS) to High(Servers[Self.ChannelIndex].DGKinary[Dificult]
+              .MOBS.TMobS) do
+            begin
+              for k := 0 to 49 do
+              begin
+                if (Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId = 0) then
+                  Continue;
+                DungeonInstances[FreeId].MOBS[Cnt].IntName :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].IntName;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.Create(nil,
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].Base.clientId, Self.ChannelIndex);
+                DungeonInstances[FreeId].MOBS[Cnt].Base.IsDungeonMob := True;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.mobid := Cnt;
+                DungeonInstances[FreeId].MOBS[Cnt].MaxHp :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].InitHP;
+                DungeonInstances[FreeId].MOBS[Cnt].CurrentHP :=
+                  DungeonInstances[FreeId].MOBS[Cnt].MaxHp;
+                DungeonInstances[FreeId].MOBS[Cnt].Position :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS[J]
+                  .MobsP[k].InitPos;
+                DungeonInstances[FreeId].MOBS[Cnt].Base.PlayerCharacter.LastPos
+                  := DungeonInstances[FreeId].MOBS[Cnt].Position;
+                DungeonInstances[FreeId].MOBS[Cnt].MobLevel :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].MobLevel;
+                DungeonInstances[FreeId].MOBS[Cnt].MobExp :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].MobExp;
+                DungeonInstances[FreeId].MOBS[Cnt].MobType :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].MobType;
+                DungeonInstances[FreeId].MOBS[Cnt].MobElevation :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS[J]
+                  .MobElevation;
+                DungeonInstances[FreeId].MOBS[Cnt].Cabeca :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].Cabeca;
+                DungeonInstances[FreeId].MOBS[Cnt].Perna :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult]
+                  .MOBS.TMobS[J].Perna;
+                DungeonInstances[FreeId].MOBS[Cnt].FisAtk :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].FisAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].MagAtk :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].MagAtk;
+                DungeonInstances[FreeId].MOBS[Cnt].FisDef :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].FisDef;
+                DungeonInstances[FreeId].MOBS[Cnt].MagDef :=
+                  Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS
+                  [J].MagDef;
+                Move(Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS[J]
+                  .Equip, DungeonInstances[FreeId].MOBS[Cnt].Equip, 26);
+                case Servers[Self.ChannelIndex].DGKinary[Dificult].MOBS.TMobS[J]
+                  .DungeonDropIndex of
+                  401, 501, 601:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                        .MobsDrop.SemCoroa, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                        .MobsDrop.SemCoroa));
+                    end;
+                  402, 502, 602:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                        .MobsDrop.CoroaPrata, DungeonInstances[FreeId].MobsDrop
+                        [Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                        .MobsDrop.CoroaPrata));
+                    end;
+                  403, 503, 603:
+                    begin
+                      Move(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                        .MobsDrop.CoroaDourada,
+                        DungeonInstances[FreeId].MobsDrop[Cnt].Drops,
+                        sizeof(Servers[Self.ChannelIndex].DGKinary[Dificult]
+                        .MobsDrop.CoroaDourada));
+                    end;
+                end;
+                Inc(Cnt);
+              end;
+            end;
+            Servers[Self.ChannelIndex].Players[i].DungeonInstanceID :=
+              Servers[Self.ChannelIndex].Players[Self.Party.Leader]
+              .DungeonInstanceID;
+            DungeonInstances[FreeId].InstanceOnline := True;
+            DungeonInstances[FreeId].MainThread :=
+              TDungeonMainThread.Create(1000, Self.ChannelIndex, FreeId);
+          end;
+        end;
+    end;
+  end;
+end;
+
+procedure TPlayer.SendSpawnMobDungeon(MOB: PMobsStructDungeonInstance);
+var
+  Packet: TSpawnMobPacket;
+begin
+  ZeroMemory(@Packet, sizeof(TSpawnMobPacket));
+  Packet.Header.size := sizeof(TSpawnMobPacket);
+  Packet.Header.Index := MOB^.Base.clientId;
+  Packet.Header.Code := $35E;
+  Move(MOB^.Equip, Packet.Equip, 16);
+  Packet.Position := MOB^.Position;
+  Packet.MaxHp := MOB^.MaxHp;
+  Packet.CurHP := Packet.MaxHp;
+  Packet.MaxMP := Packet.MaxHp;
+  Packet.CurMp := Packet.MaxMP;
+  Packet.Level := MOB^.MobLevel;
+  Packet.SpawnType := SPAWN_NORMAL;
+  Packet.Altura := MOB^.MobElevation;
+  Packet.Tronco := MOB^.Cabeca;
+  Packet.Perna := MOB^.Perna;
+  Packet.MobType := MOB^.MobType;
+  Packet.MobName := MOB^.IntName;
+  Self.SendPacket(Packet, Packet.Header.size);
+end;
+
+procedure TPlayer.SendRemoveMobDungeon(MOB: PMobsStructDungeonInstance);
+var
+  Packet: TSendRemoveMobPacket;
+begin
+  ZeroMemory(@Packet, sizeof(TSendRemoveMobPacket));
+  Packet.Header.size := sizeof(TSendRemoveMobPacket);
+  Packet.Header.Index := $7535;
+  Packet.Header.Code := $101;
+  Packet.Index := MOB.Base.clientId;
+  Packet.DeleteType := DELETE_NORMAL;
+  Self.SendPacket(Packet, Packet.Header.size);
+end;
+{$ENDREGION}
 
 function TPlayer.CheckGameMasterLogged(): Boolean;
 begin
@@ -9824,5 +11204,3 @@ begin
 end;
 
 end.
-
-

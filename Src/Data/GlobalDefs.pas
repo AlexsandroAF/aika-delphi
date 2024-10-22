@@ -4,7 +4,7 @@ uses
   Log,
   ServerSocket, LoginSocket, TokenSocket,
   PlayerData, MiscData, FilesData, Windows, NPC,
-  Generics.Collections, GuildData, Nation, Player;
+  Generics.Collections, GuildData, Nation, Player, Dungeon;
 var
   Logger: TLog;
   WebServerClosed: Boolean;
@@ -15,7 +15,7 @@ var
   TokenServerAdmin: TTokenServerAdmin;
   PointerPlayer: PPlayer;
   ActivePlayersNow: Integer;
-//  DungeonInstances: Array [1 .. 1] of TDungeonInstance;
+  DungeonInstances: Array [1 .. 1] of TDungeonInstance;
   xServerClosed: Boolean;
 {$REGION 'Files defs'}
   ItemList: TItemList;
@@ -178,20 +178,21 @@ const
   MONSTERS_VERIT = 10;
   MONSTERS_ADICIONAL1 = 11;
   MONSTERS_ADICIONAL2 = 12;
-  //DUNGEON_LOST_MINES = 4;
-  //DUNGEON_KINARY_AVIARY = 5;
-  //DUNGEON_MARAUDER_HOLD = 2;
-  //DUNGEON_MARAUDER_CABIN = 3;
-  //DUNGEON_ZANTORIAN_CITADEL = 1;
-  // DUNGEON_MINE_2 = 5;
-  //DUNGEON_PHELTAS = 10;
-  //DUNGEON_NPC_PRISON = 2302;
-  //DUNGEON_NPC_MINA_1 = 2197;
-  //DUNGEON_NPC_MINA_2 = 2151;
-  //DUNGEON_NPC_EVG_INF = 2095;
-  //DUNGEON_NPC_EVG_SUP = 2103;
-  //DUNGEON_NPC_URSULA = 2109;
-  //DUNGEON_NPC_KINARY = 2258;
+  { DUNGEONS }
+  DUNGEON_LOST_MINES = 4;
+  DUNGEON_KINARY_AVIARY = 5;
+  DUNGEON_MARAUDER_HOLD = 2;
+  DUNGEON_MARAUDER_CABIN = 3;
+  DUNGEON_ZANTORIAN_CITADEL = 1;
+  DUNGEON_MINE_2 = 5;
+  DUNGEON_PHELTAS = 10;
+  DUNGEON_NPC_PRISON = 2302;
+  DUNGEON_NPC_MINA_1 = 2197;
+  DUNGEON_NPC_MINA_2 = 2151;
+  DUNGEON_NPC_EVG_INF = 2095;
+  DUNGEON_NPC_EVG_SUP = 2103;
+  DUNGEON_NPC_URSULA = 2109;
+  DUNGEON_NPC_KINARY = 2258;
   { Refinamento }
   ChancesOfRefinamentNormal: Array [0..10] of Byte = (100, 100, 100, 100, 100, 74, 64,
   54, 22, 12, 5);

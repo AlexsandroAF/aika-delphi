@@ -226,10 +226,10 @@ type
     class function sendCharacterMail(var Player: TPlayer;
       var Buffer: array of BYTE): Boolean;
     { Dungeons }
-    {class function RequestEnterDungeon(var Player: TPlayer;
+    class function RequestEnterDungeon(var Player: TPlayer;
       Buffer: Array of BYTE): Boolean;
     class function DungeonLobbyConfirm(var Player: TPlayer;
-      Buffer: Array of BYTE): Boolean;}
+      Buffer: Array of BYTE): Boolean;
     { MakeItems }
     class function MakeItem(var Player: TPlayer; Buffer: Array of BYTE)
       : Boolean;
@@ -329,7 +329,7 @@ uses
   GlobalDefs, Functions, Log, PlayerData, Util, MiscData, Windows,
   NPCHandlers, ItemFunctions, SkillFunctions, DateUtils, PartyData,
   CommandHandlers, BaseMob, GuildData, MOB, EntityMail, FilesData,
-  AuctionFunctions, SQL;
+  AuctionFunctions, SQL, Dungeon;
 {$REGION 'Login Functions'}
 
 class function TPacketHandlers.CheckLogin(var Player: TPlayer;
@@ -342,15 +342,15 @@ var
   dcs: Boolean;
 begin
   Result := False;
-  if (Packet.Version <> SERVER_VERSION) then
+  {if (Packet.Version <> SERVER_VERSION) then
   begin
-    {Player.SendClientMessage
+    Player.SendClientMessage
       ('Client desatualizado. Abrir pelo Launcher como Administrador.');
     Logger.Write(Packet.Version.ToString, TLogType.Packets);
     Player.SocketClosed := True;
     // Servers[Player.ChannelIndex].Disconnect(Player);
-    Exit;  }
-  end;
+    Exit;
+  end; }
   Username := TFunctions.CharArrayToString(Packet.Username);
   Token := TFunctions.CharArrayToString(Packet.Token);
   ZeroMemory(@Player.Account.Characters, sizeof(TCharacterDB) * 3);
@@ -2559,7 +2559,7 @@ begin
         Player.OpennedOption := 0;
         Exit;
       end;
-    28: //Ursula
+{    28: //Ursula
     begin
     var
     ItemSlot: Integer;
@@ -2649,7 +2649,7 @@ begin
             Player.OpennedNPC := 0;
             Player.OpennedOption := 0;
           end;
-      end;
+      end; }
     70:
       begin // Desfazer aliança
         Player.OpennedNPC := 0;
@@ -9242,7 +9242,7 @@ begin
 end;
 {$ENDREGION}
 {$REGION 'Dungeons'}
- {
+
 class function TPacketHandlers.RequestEnterDungeon(var Player: TPlayer;
   Buffer: Array of BYTE): Boolean;
 var
@@ -9516,7 +9516,7 @@ begin
   end;
   Result := True;
 end;
-}
+
 {$ENDREGION}
 {$REGION 'Make Items'}
 
@@ -13624,5 +13624,6 @@ begin
   Result := True;
 end;
 {$ENDREGION}
+
 
 end.

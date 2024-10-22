@@ -28,7 +28,7 @@ type
     class function ShowChangeNation(var Player: TPlayer): Boolean;
     class function ShowAgros(var Player: TPlayer): Boolean;
     class function ShowNivelament(var Player: TPlayer): Boolean;
-    // class function ShowDungeonDialog(var Player: TPlayer): Boolean;
+    class function ShowDungeonDialog(var Player: TPlayer): Boolean;
     class procedure CloseOptions(var Player: TPlayer);
     class function SaveLocation(var Player: TPlayer; NpcId: WORD): Boolean;
     class function SignInCastle(var Player: TPlayer; NpcId: WORD): Boolean;
@@ -654,8 +654,8 @@ begin
   Result := True;
 end;
 
-{
-  class function TNPCHandlers.ShowDungeonDialog(var Player: TPlayer): Boolean;
+
+class function TNPCHandlers.ShowDungeonDialog(var Player: TPlayer): Boolean;
   var
   Packet: TSendDungeonDialog;
   begin
@@ -696,7 +696,7 @@ end;
   // Player.OpennedOption := 0;
   Result := True;
   end;
-}
+
 class function TNPCHandlers.ShowBigorna(var Player: TPlayer): Boolean;
 begin
   Player.SendData(Player.Base.ClientId, $310, $4);

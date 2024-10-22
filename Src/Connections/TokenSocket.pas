@@ -228,7 +228,7 @@ begin
   //Logger.Write(URL, TLogType.Packets);
   case AnsiIndexStr(URL, ['/member/aika_get_token.asp',
     '/servers/aika_get_chrcnt.asp', '/servers/serv00.asp',
-    '/servers/aika_reset_flag.asp'{, '/member/aika_create_account.asp'}]) of
+    '/servers/aika_reset_flag.asp', '/member/aika_create_account.asp']) of
     0:
       TAuthHandlers.AikaGetToken(Param, Result);
     1:
@@ -237,8 +237,8 @@ begin
       TAuthHandlers.GetServerPlayers(Result);
     3:
       TAuthHandlers.AikaResetFlag(Param, Result);
-    //4:
-     // TAuthHandlers.AikaCreateAccount(Param, Result);
+    4:
+      TAuthHandlers.AikaCreateAccount(Param, Result);
   end;
 end;
 end.

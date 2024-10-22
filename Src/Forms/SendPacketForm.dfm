@@ -147,207 +147,440 @@ object frmSendPacket: TfrmSendPacket
     007F0000000000000000000000000000000000000C00FFFFFFFFFFFFFFFFFFFF
     FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF}
   TextHeight = 13
-  object lblPacket: TLabel
-    Left = 8
-    Top = 11
-    Width = 36
-    Height = 13
-    Caption = 'Packet:'
-  end
-  object Label1: TLabel
-    Left = 21
-    Top = 106
-    Width = 23
-    Height = 13
-    Caption = 'Nick:'
-  end
-  object Label2: TLabel
-    Left = 191
-    Top = 106
-    Width = 45
-    Height = 13
-    Caption = 'Client ID:'
-  end
-  object memPacket: TMemo
-    Left = 50
+  object PgControladora: TPageControl
+    Left = 0
     Top = 8
-    Width = 383
-    Height = 89
-    ScrollBars = ssVertical
+    Width = 713
+    Height = 368
+    ActivePage = Server
     TabOrder = 0
-  end
-  object edtNick: TEdit
-    Left = 50
-    Top = 103
-    Width = 135
-    Height = 21
-    TabOrder = 1
-  end
-  object btnSendPacket: TButton
-    Left = 69
-    Top = 130
-    Width = 92
-    Height = 23
-    Caption = 'Send by Nick'
-    TabOrder = 2
-    OnClick = btnSendPacketClick
-  end
-  object edtClientID: TEdit
-    Left = 237
-    Top = 103
-    Width = 47
-    Height = 21
-    NumbersOnly = True
-    TabOrder = 3
-  end
-  object btnSendByClientID: TButton
-    Left = 290
-    Top = 103
-    Width = 135
-    Height = 25
-    Caption = 'Send by Client ID'
-    TabOrder = 4
-    OnClick = btnSendByClientIDClick
-  end
-  object gbServerOperation: TGroupBox
-    Left = 439
-    Top = 8
-    Width = 282
-    Height = 145
-    Caption = 'Server Local Operation'
-    TabOrder = 5
-    object Label3: TLabel
-      Left = 16
-      Top = 17
-      Width = 204
-      Height = 13
-      Caption = 'Enviar mensagem (for all) como [servidor]:'
-    end
-    object btncloseserver: TButton
-      Left = 204
-      Top = 117
-      Width = 75
-      Height = 25
-      Caption = 'Close Server'
-      TabOrder = 0
-      OnClick = btncloseserverClick
-    end
-    object btnSendMsg: TButton
-      Left = 143
-      Top = 63
-      Width = 75
-      Height = 21
-      Caption = 'Send'
-      TabOrder = 1
-      OnClick = btnSendMsgClick
-    end
-    object edtMsg: TEdit
-      Left = 17
-      Top = 36
-      Width = 240
-      Height = 21
-      TabOrder = 2
-      TextHint = 'Type message here...'
-    end
-    object btnResetServer: TButton
-      Left = 123
-      Top = 117
-      Width = 75
-      Height = 25
-      Caption = 'Reset Server'
-      TabOrder = 3
-      OnClick = btnResetServerClick
-    end
-    object btnClearMsg: TButton
-      Left = 236
-      Top = 63
-      Width = 27
-      Height = 21
-      Caption = 'C'
-      TabOrder = 4
-      OnClick = btnClearMsgClick
-    end
-  end
-  object cbServerInfo: TGroupBox
-    Left = 431
-    Top = 159
-    Width = 290
-    Height = 222
-    Caption = 'Server Info'
-    Color = clWhite
-    ParentBackground = False
-    ParentColor = False
-    TabOrder = 6
-    object Label4: TLabel
-      Left = 24
-      Top = 24
-      Width = 24
-      Height = 13
-      Caption = 'CPU:'
-    end
-    object Label5: TLabel
-      Left = 24
-      Top = 43
-      Width = 26
-      Height = 13
-      Caption = 'RAM:'
-    end
-    object Label6: TLabel
-      Left = 24
-      Top = 62
-      Width = 72
-      Height = 13
-      Caption = 'Active Players:'
-    end
-    object Label7: TLabel
-      Left = 24
-      Top = 81
-      Width = 48
-      Height = 13
-      Caption = 'Channels:'
-    end
-    object GroupBox1: TGroupBox
-      Left = 102
-      Top = 24
-      Width = 67
-      Height = 81
-      Color = clBlack
-      ParentBackground = False
-      ParentColor = False
-      TabOrder = 0
-      object lblCpu: TLabel
-        Left = 11
-        Top = 3
-        Width = 17
-        Height = 13
-        Caption = '0%'
+    object Server: TTabSheet
+      Caption = 'Server'
+      object gbServerOperation: TGroupBox
+        Left = 423
+        Top = 8
+        Width = 282
+        Height = 145
+        Caption = 'Server Local Operation'
+        TabOrder = 0
+        object Label3: TLabel
+          Left = 16
+          Top = 17
+          Width = 204
+          Height = 13
+          Caption = 'Enviar mensagem (for all) como [servidor]:'
+        end
+        object btncloseserver: TButton
+          Left = 188
+          Top = 109
+          Width = 75
+          Height = 25
+          Caption = 'Close Server'
+          TabOrder = 0
+          OnClick = btncloseserverClick
+        end
+        object btnSendMsg: TButton
+          Left = 143
+          Top = 63
+          Width = 75
+          Height = 21
+          Caption = 'Send'
+          TabOrder = 1
+          OnClick = btnSendMsgClick
+        end
+        object edtMsg: TEdit
+          Left = 17
+          Top = 36
+          Width = 240
+          Height = 21
+          TabOrder = 2
+          TextHint = 'Type message here...'
+        end
+        object btnResetServer: TButton
+          Left = 107
+          Top = 109
+          Width = 75
+          Height = 25
+          Caption = 'Reset Server'
+          TabOrder = 3
+          OnClick = btnResetServerClick
+        end
+        object btnClearMsg: TButton
+          Left = 236
+          Top = 63
+          Width = 27
+          Height = 21
+          Caption = 'C'
+          TabOrder = 4
+          OnClick = btnClearMsgClick
+        end
       end
-      object lblRam: TLabel
-        Left = 11
-        Top = 22
-        Width = 23
-        Height = 13
-        Caption = '0 MB'
+      object cbServerInfo: TGroupBox
+        Left = 423
+        Top = 159
+        Width = 279
+        Height = 116
+        Caption = 'Server Info'
+        Color = clWhite
+        ParentBackground = False
+        ParentColor = False
+        TabOrder = 1
+        object Label4: TLabel
+          Left = 24
+          Top = 24
+          Width = 24
+          Height = 13
+          Caption = 'CPU:'
+        end
+        object Label5: TLabel
+          Left = 24
+          Top = 43
+          Width = 26
+          Height = 13
+          Caption = 'RAM:'
+        end
+        object Label6: TLabel
+          Left = 24
+          Top = 62
+          Width = 72
+          Height = 13
+          Caption = 'Active Players:'
+        end
+        object Label7: TLabel
+          Left = 24
+          Top = 81
+          Width = 48
+          Height = 13
+          Caption = 'Channels:'
+        end
+        object GroupBox1: TGroupBox
+          Left = 102
+          Top = 24
+          Width = 67
+          Height = 81
+          Color = clBlack
+          ParentBackground = False
+          ParentColor = False
+          TabOrder = 0
+          object lblCpu: TLabel
+            Left = 11
+            Top = 3
+            Width = 17
+            Height = 13
+            Caption = '0%'
+          end
+          object lblRam: TLabel
+            Left = 11
+            Top = 22
+            Width = 23
+            Height = 13
+            Caption = '0 MB'
+          end
+          object lblActivePlayers: TLabel
+            Left = 11
+            Top = 41
+            Width = 6
+            Height = 13
+            Caption = '0'
+          end
+          object lblChannels: TLabel
+            Left = 11
+            Top = 60
+            Width = 6
+            Height = 13
+            Caption = '0'
+          end
+        end
       end
-      object lblActivePlayers: TLabel
-        Left = 11
-        Top = 41
-        Width = 6
-        Height = 13
-        Caption = '0'
+      object gbPacket: TGroupBox
+        Left = 3
+        Top = 8
+        Width = 398
+        Height = 169
+        Caption = 'Pacotes'
+        TabOrder = 2
+        object lblPacket: TLabel
+          Left = 40
+          Top = -61
+          Width = 36
+          Height = 13
+          Caption = 'Packet:'
+        end
+        object Label1: TLabel
+          Left = 11
+          Top = 109
+          Width = 23
+          Height = 13
+          Caption = 'Nick:'
+        end
+        object Label2: TLabel
+          Left = 250
+          Top = 109
+          Width = 45
+          Height = 13
+          Caption = 'Client ID:'
+        end
+        object edtClientID: TEdit
+          Left = 301
+          Top = 109
+          Width = 84
+          Height = 21
+          NumbersOnly = True
+          TabOrder = 0
+        end
+        object edtNick: TEdit
+          Left = 40
+          Top = 109
+          Width = 106
+          Height = 21
+          TabOrder = 1
+        end
+        object btnSendByClientID: TButton
+          Left = 280
+          Top = 136
+          Width = 105
+          Height = 25
+          Caption = 'Send by Client ID'
+          TabOrder = 2
+          OnClick = btnSendByClientIDClick
+        end
+        object memPacket: TMemo
+          Left = 11
+          Top = 14
+          Width = 374
+          Height = 89
+          ScrollBars = ssVertical
+          TabOrder = 3
+        end
+        object btnSendPacket: TButton
+          Left = 40
+          Top = 136
+          Width = 105
+          Height = 23
+          Caption = 'Send by Nick'
+          TabOrder = 4
+          OnClick = btnSendPacketClick
+        end
       end
-      object lblChannels: TLabel
-        Left = 11
-        Top = 60
-        Width = 6
-        Height = 13
-        Caption = '0'
+      object gbUserOn: TGroupBox
+        Left = 3
+        Top = 183
+        Width = 398
+        Height = 154
+        Caption = 'Jogadores Online'
+        TabOrder = 3
+        object lvPlayersOnline: TListView
+          Left = 12
+          Top = 24
+          Width = 302
+          Height = 102
+          Columns = <
+            item
+              Caption = 'ID do Jogador'
+              Width = 80
+            end
+            item
+              Caption = 'Personagem'
+              Width = 150
+            end
+            item
+              Caption = 'Level'
+            end>
+          TabOrder = 0
+          ViewStyle = vsReport
+        end
+        object btnAtualizarPlayers: TButton
+          Left = 320
+          Top = 24
+          Width = 66
+          Height = 25
+          Caption = 'Atualizar'
+          TabOrder = 1
+          OnClick = btnAtualizarPlayersClick
+        end
+      end
+    end
+    object accCreate: TTabSheet
+      Caption = 'Criar Conta'
+      ImageIndex = 1
+      object GroupBox2: TGroupBox
+        Left = 16
+        Top = 16
+        Width = 209
+        Height = 209
+        Caption = 'Criar Conta de Usuario'
+        TabOrder = 0
+        object lblUsuario: TLabel
+          Left = 16
+          Top = 24
+          Width = 40
+          Height = 13
+          Caption = 'Usuario:'
+        end
+        object lblSenha: TLabel
+          Left = 16
+          Top = 70
+          Width = 34
+          Height = 13
+          Caption = 'Senha:'
+        end
+        object lblTupoConta: TLabel
+          Left = 16
+          Top = 116
+          Width = 71
+          Height = 13
+          Caption = 'Tipo de Conta:'
+        end
+        object edtNewUsername: TEdit
+          Left = 16
+          Top = 43
+          Width = 161
+          Height = 21
+          TabOrder = 0
+        end
+        object edtNewPassword: TEdit
+          Left = 16
+          Top = 89
+          Width = 161
+          Height = 21
+          TabOrder = 1
+        end
+        object btnCreateAccount: TButton
+          Left = 102
+          Top = 160
+          Width = 75
+          Height = 25
+          Caption = 'Criar Conta'
+          TabOrder = 2
+          OnClick = btnCreateAccountClick
+        end
+        object cbTypeAccount: TComboBox
+          Left = 16
+          Top = 133
+          Width = 161
+          Height = 21
+          Style = csDropDownList
+          TabOrder = 3
+          Items.Strings = (
+            'GM'
+            'Normal'
+            'Bloqueado')
+        end
+      end
+    end
+    object dbSendItem: TTabSheet
+      Caption = 'Banco de Dados'
+      ImageIndex = 2
+      object GroupBoxItemSend: TGroupBox
+        Left = 3
+        Top = 0
+        Width = 142
+        Height = 337
+        Caption = 'Enviar Item a um Jogador'
+        TabOrder = 0
+        object lblPlayerID: TLabel
+          Left = 11
+          Top = 24
+          Width = 72
+          Height = 13
+          Caption = 'ID do Jogador:'
+        end
+        object lblItemID: TLabel
+          Left = 11
+          Top = 72
+          Width = 55
+          Height = 13
+          Caption = 'ID do Item:'
+        end
+        object lblAmount: TLabel
+          Left = 13
+          Top = 118
+          Width = 100
+          Height = 13
+          Caption = 'Quantidade do Item:'
+        end
+        object edtPlayerID: TEdit
+          Left = 11
+          Top = 45
+          Width = 102
+          Height = 21
+          TabOrder = 0
+        end
+        object edtItemID: TEdit
+          Left = 11
+          Top = 91
+          Width = 102
+          Height = 21
+          TabOrder = 1
+        end
+        object edtAmount: TEdit
+          Left = 13
+          Top = 137
+          Width = 102
+          Height = 21
+          TabOrder = 2
+        end
+        object btnSendItem: TButton
+          Left = 38
+          Top = 164
+          Width = 75
+          Height = 25
+          Caption = 'Enviar Item'
+          TabOrder = 3
+          OnClick = btnSendItemClick
+        end
+      end
+      object GroupBoxBDI: TGroupBox
+        Left = 175
+        Top = 0
+        Width = 490
+        Height = 337
+        Caption = 'Banco de Dados'
+        TabOrder = 1
+        object btnBuscarItem: TButton
+          Left = 398
+          Top = 19
+          Width = 75
+          Height = 25
+          Caption = 'Buscar Item'
+          TabOrder = 0
+          OnClick = btnBuscarItemClick
+        end
+        object edtBuscarItem: TEdit
+          Left = 16
+          Top = 21
+          Width = 369
+          Height = 21
+          Hint = 'Buscar nome do item...'
+          TabOrder = 1
+        end
+        object lvItens: TListView
+          Left = 16
+          Top = 50
+          Width = 457
+          Height = 271
+          Columns = <
+            item
+              Caption = 'ID'
+            end
+            item
+              Caption = 'Nome'
+              Width = 300
+            end
+            item
+              Caption = 'Descri'#231#227'o'
+              Width = 100
+            end>
+          TabOrder = 2
+          ViewStyle = vsReport
+          OnDblClick = lvItensDblClick
+        end
       end
     end
   end
   object TimerServerInfo: TTimer
     OnTimer = TimerServerInfoTimer
-    Left = 360
-    Top = 218
+    Left = 656
+    Top = 322
   end
 end

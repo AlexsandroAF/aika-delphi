@@ -9,6 +9,7 @@ type
       Parameter: string);
   private
     class procedure AddItem(var Player: TPlayer; Data: TStringList);
+    class procedure AddItemEvento(var Player: TPlayer; Data: TStringList);
     class procedure EquipItem(var Player: TPlayer; Data: TStringList);
     class procedure MoveItem(var Player: TPlayer; Data: TStringList);
     class procedure AddLevel(var Player: TPlayer; Data: TStringList);
@@ -212,7 +213,7 @@ begin
   TItemFunctions.PutItem(Player, Index, Quanty);
 end;
 
-{class procedure TCommandHandlers.AddItemEvento(var Player: TPlayer;
+class procedure TCommandHandlers.AddItemEvento(var Player: TPlayer;
   Data: TStringList);
 var
   Index: WORD;
@@ -287,7 +288,7 @@ begin
     Exit;
   end;
   TItemFunctions.PutItemOnEventByCharIndex(Player, Index, Quanty);
-end; }
+end;
 
 class procedure TCommandHandlers.EquipItem(var Player: TPlayer;
   Data: TStringList);
