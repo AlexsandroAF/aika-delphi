@@ -692,8 +692,8 @@ class function TNPCHandlers.ShowDungeonDialog(var Player: TPlayer): Boolean;
   end;
   Packet.Entering := 1;
   Player.SendPacket(Packet, Packet.Header.Size);
-  // Player.OpennedNPC := 0;
-  // Player.OpennedOption := 0;
+  Player.OpennedNPC := 0;
+  Player.OpennedOption := 0;
   Result := True;
   end;
 

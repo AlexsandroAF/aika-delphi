@@ -1481,8 +1481,8 @@ begin
             String(Player.Account.Header.userName) + '] ' + DateTimeToStr(now) +
             '.', TLogType.Error);
       end;
-    //$355:
-{      try
+    $355:
+      try
         TPacketHandlers.DungeonLobbyConfirm(Player, Buffer);
       except
         on E: Exception do
@@ -1490,7 +1490,7 @@ begin
             E.Message + ' : ' + chr(13) + E.StackTrace + '] username[' +
             String(Player.Account.Header.userName) + '] ' + DateTimeToStr(now) +
             '.', TLogType.Error);
-      end;}
+      end;
     $356:
       try
         if (Player.IsInstantiated) then

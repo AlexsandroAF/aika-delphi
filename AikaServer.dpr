@@ -137,10 +137,12 @@ begin
     Logger.Space; { Space }
     TLoad.InitNPCS;
     TLoad.InitGuilds;
+       // Inicialização opcional da GUI
+
+
     for i := Low(Servers) to High(Servers) do
     begin
       Servers[i].ServerHasClosed := False;
-
       Servers[i].StartThreads;
 
       if (i <= 2) then
@@ -152,20 +154,16 @@ begin
 
     end;
 
-
-       // Inicialização opcional da GUI
-    if (CreateSendPacketForm) then
-    begin
-      Application.Initialize;
-      Application.CreateForm(TfrmSendPacket, frmSendPacket);
-  Application.CreateForm(TfrmPingback, frmPingback);
-  Application.Run;
-    end;
-
     timeinit := MilliSecondsBetween(Now, Uptime);
     Logger.Write('Servidor levou ' + IntToStr(Round(timeinit / 1000)) +
       ' segundos para carregar completamente.', TLogType.ServerStatus);
     Logger.Space;
+
+    begin
+    Application.Initialize;
+    Application.CreateForm(TfrmSendPacket, frmSendPacket);
+    Application.Run;
+    end;
 
     while (True) do
     begin

@@ -482,6 +482,7 @@ type
     Result       : DWORD;
   end;
 {$ENDREGION}
+
 {$REGION 'Dungeon Packets'}
 type
   PPacket_119 = ^TSendDungeonDialog;
@@ -527,6 +528,7 @@ type
     Accept: DWORD;
   end;
 {$ENDREGION}
+
 {$REGION 'Moviment Packet'}
 type
   PPacket_301 = ^TMovementPacket;

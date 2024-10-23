@@ -826,7 +826,6 @@ begin
   end;
 end;
 {$ENDREGION}
-{$ENDREGION}
 {$REGION 'Trade Functions'}
 class function TFunctions.ExecuteTrade(var Player: TPlayer;
   var OtherPlayer: TPlayer): Boolean;

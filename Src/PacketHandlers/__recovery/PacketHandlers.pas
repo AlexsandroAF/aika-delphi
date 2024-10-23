@@ -1,4 +1,4 @@
-﻿unit PacketHandlers;
+unit PacketHandlers;
 
 interface
 
@@ -9362,7 +9362,11 @@ var
   Packet: TConfirmDungeonEnter absolute Buffer;
   PacketToSend: TSelectDungeonToEnter;
   I, cnt: WORD;
+
 begin
+  Player.PreviousChannel := Player.Chann;
+  Player.PreviousPosition := Player.Base.PlayerCharacter.LastPos;
+
   if (Packet.Index = 0) then
   begin // alguem desistiu, fechar pra todos
     if (Player.PartyIndex <> 0) then

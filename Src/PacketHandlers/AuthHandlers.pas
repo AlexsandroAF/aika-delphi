@@ -225,45 +225,92 @@ begin
   ZeroMemory(@Player, SizeOf(Player));
 end;
 
-class function TAuthHandlers.AikaCreateAccount(Params: TStrings;
-  var Response: string): Boolean;
+class function TAuthHandlers.AikaCreateAccount(Params: TStrings; var Response: string): Boolean;
 var
-  Username, Password: string;
-  Account: TAccountFile;
+  Username, Password, Email: string;
   MySQLComp: TQuery;
 begin
-  Username := ReplaceStr(Params[0], 'id=', '');
-  Password := ReplaceStr(Params[1], 'pw=', '');
-
   Result := False;
   Response := '0';
 
+  // Extrair parâmetros
+  Username := ReplaceStr(Params.Values['id'], 'id=', '');
+  Password := ReplaceStr(Params.Values['pw'], 'pw=', '');
+  Email := ReplaceStr(Params.Values['email'], 'email=', '');
+
+  // Validação dos parâmetros
+  if (Username = '') or (Password = '') then
+  begin
+    Logger.Write('Erro: Username ou Password vazios ao criar conta.', TLogType.Warnings);
+    Response := '-1'; // Código de erro para parâmetros vazios
+    Exit;
+  end;
+
+  // Se o email não for fornecido, use um valor padrão
+  if Email = '' then
+    Email := 'no-reply@example.com';
+
+  // Inicializar conexão com o banco de dados
   MySQLComp := TQuery.Create(AnsiString(MYSQL_SERVER), MYSQL_PORT,
     AnsiString(MYSQL_USERNAME), AnsiString(MYSQL_PASSWORD),
     AnsiString(MYSQL_DATABASE));
 
   if not(MySQLComp.Query.Connection.Connected) then
   begin
-    Logger.Write('Falha de conex�o individual com mysql.[AikaCreateAccount]',
-      TlogType.Warnings);
-    Logger.Write('PERSONAL MYSQL FAILED LOAD.[AikaCreateAccount]', TlogType.Error);
+    Logger.Write('Falha de conexão com MySQL ao criar conta.[AikaCreateAccount]',
+      TLogType.Warnings);
+    Response := '-2'; // Código de erro para falha na conexão MySQL
     Exit;
   end;
 
-  MySQLComp.SetQuery('INSERT INTO accounts (username, password, password_hash, last_token_creation_time'+
-    ', nation, isactive, account_status, account_type, storage_gold, cash, ip_created, time_created'+
-    ') VALUES ('+QuotedStr(Username)+','+QuotedStr(Password)+','+ QuotedStr(TFunctions.StringToMd5(Password)) +','+QuotedStr('01/01/0001 00:00:01')+',2,0,0,0,0,0,' + QuotedStr('::0')+ ',1)');
+  // Verificar se a conta já existe
+  MySQLComp.SetQuery('SELECT id FROM accounts WHERE username = ' + QuotedStr(Username));
+  MySQLComp.Run();
 
-  MySQLComp.Run(False);
+  if not MySQLComp.Query.Eof then
+  begin
+    Logger.Write('Erro: Conta já existe com o username: ' + Username, TLogType.Warnings);
+    Response := '-3'; // Código de erro para conta já existente
+    Exit;
+  end;
 
-  Result := True;
-  Response := Account.Header.AccountId.ToString;
+  // Inserir a nova conta na tabela accounts
+  MySQLComp.SetQuery('INSERT INTO accounts (username, password_hash, mail, last_token_creation_time, ' +
+    'nation, isactive, account_status, account_type, storage_gold, cash, ip_created, time_created, premium_time, ban_days, playtime) ' +
+    'VALUES (' +
+    QuotedStr(Username) + ', ' +
+    QuotedStr(TFunctions.StringToMd5(Password)) + ', ' +
+    QuotedStr(Email) + ', ' +
+    QuotedStr('01/01/0001 00:00:01') + ', ' +
+    '2, ' +            // nation padrão (2)
+    QuotedStr('1') + ', ' + // isactive (1 = ativo)
+    '0, ' +            // account_status (0 = normal)
+    '0, ' +            // account_type (0 = normal)
+    '0, ' +            // storage_gold
+    '0, ' +            // cash
+    QuotedStr('::0') + ', ' + // ip_created
+    '1, ' +            // time_created (tempo padrão, pode ser ajustado)
+    QuotedStr('01/01/0001 00:00:01') + ', ' + // premium_time
+    '0, ' +            // ban_days (0 = não banido)
+    '0)');             // playtime (0 = novo)
 
-  Logger.Write('Conta: ' + string(Account.Header.Username) +
-    ' criada com o privil�gio: ' + BYTE(Account.Header.AccountType).ToString,
-    TlogType.ConnectionsTraffic);
+  try
+    MySQLComp.Run(False);
+    Result := True;
+    Response := 'Conta criada com sucesso.';
+    Logger.Write('Conta: ' + Username + ' criada com sucesso.', TLogType.Painel);
+    Logger.Write('Criando conta com os seguintes parâmetros: Username=' + Username +
+             ', Email=' + Email, TLogType.ConnectionsTraffic);
 
-  ZeroMemory(@Account, SizeOf(Account));
+  except
+    on E: Exception do
+    begin
+      Logger.Write('Erro ao criar conta: ' + E.Message, TLogType.Painel);
+      Response := '-4'; // Código de erro para falha na inserção
+    end;
+  end;
+
+  MySQLComp.Free;
 end;
 
 {$ENDREGION}

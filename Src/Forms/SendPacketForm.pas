@@ -60,6 +60,8 @@ type
     gbUserOn: TGroupBox;
     lvPlayersOnline: TListView;
     btnAtualizarPlayers: TButton;
+    edtNewEmail: TEdit;
+    lblEmail: TLabel;
     procedure btnSendPacketClick(Sender: TObject);
     procedure btncloseserverClick(Sender: TObject);
     procedure btnSendByClientIDClick(Sender: TObject);
@@ -85,7 +87,7 @@ implementation
 {$R *.dfm}
 uses
   GlobalDefs, Functions, Packets, Log, Player, PlayerData, Load, PacketHandlers,
-  ItemFunctions, FilesData ;
+  ItemFunctions, FilesData, SQL ;
 type
   TByteArray = record
     Content: ARRAY OF BYTE;
@@ -473,65 +475,81 @@ end;
 
 procedure TfrmSendPacket.btnCreateAccountClick(Sender: TObject);
 var
-  HTTP: TIdHTTP;
-  SSL: TIdSSLIOHandlerSocketOpenSSL;
-  URL, Response: string;
-  Params: TStringList;
-  NewUsername, NewPassword: string;
+  MySQLComp: TQuery;
+  NewUsername, NewPassword, NewEmail: string;
   AccountType: Integer;
 begin
   // Pegando os valores dos campos de entrada
   NewUsername := edtNewUsername.Text;
   NewPassword := edtNewPassword.Text;
-  AccountType := cbTypeAccount.ItemIndex; // Pega o índice selecionado no ComboBox
+  NewEmail := edtNewEmail.Text;
+  AccountType := cbTypeAccount.ItemIndex;
 
   // Verificar campos vazios
-  if (Trim(NewUsername).IsEmpty) or (Trim(NewPassword).IsEmpty) then
+  if (Trim(NewUsername).IsEmpty) or (Trim(NewPassword).IsEmpty) or (Trim(NewEmail).IsEmpty) then
   begin
     ShowMessage('Por favor, preencha todos os campos para criar uma conta.');
-    Response := '400';
     Exit;
   end;
 
-  // Montando a URL com os parâmetros inseridos
-  URL := Format('https://localhost:8090/member/aika_create_account.asp?id=%s&pw=%s&acctype=%d',
-                [NewUsername, NewPassword, AccountType]);
+  // Inicializar conexão com o banco de dados
+  MySQLComp := TQuery.Create(AnsiString(MYSQL_SERVER), MYSQL_PORT,
+    AnsiString(MYSQL_USERNAME), AnsiString(MYSQL_PASSWORD),
+    AnsiString(MYSQL_DATABASE));
 
-  // Inicializando o HTTP e SSL
-  HTTP := TIdHTTP.Create(nil);
-  SSL := TIdSSLIOHandlerSocketOpenSSL.Create(nil);
   try
-    HTTP.IOHandler := SSL;
-    SSL.SSLOptions.Method := sslvTLSv1_2; // Configura SSL para conexões seguras
-    SSL.SSLOptions.Mode := sslmClient;
-
-    // Parâmetros da requisição POST (se houver necessidade de enviar via POST)
-    Params := TStringList.Create;
-    try
-      Params.Add('id=' + NewUsername);
-      Params.Add('pw=' + NewPassword);
-      Params.Add('acctype=' + IntToStr(AccountType));
-
-      // Envia o pedido para a API
-      try
-        Response := HTTP.Post(URL, Params);
-        if Response = '-3' then
-        begin
-          ShowMessage('Conta já existe.');
-          Exit;
-        end
-        else
-          ShowMessage('Conta criada com sucesso! Resposta: ' + Response);
-      except
-        on E: Exception do
-          ShowMessage('Erro ao criar conta: ' + E.Message);
-      end;
-    finally
-      Params.Free;
+    if not MySQLComp.Query.Connection.Connected then
+    begin
+      ShowMessage('Erro ao conectar com o banco de dados. Verifique a conexão.');
+      Exit;
     end;
+
+    // Verificar se a conta já existe
+    MySQLComp.SetQuery('SELECT id FROM accounts WHERE username = ' + QuotedStr(NewUsername));
+    MySQLComp.Run();
+
+    if not MySQLComp.Query.Eof then
+    begin
+      ShowMessage('Erro: Conta já existe com o username: ' + NewUsername);
+      Exit;
+    end;
+
+    // Inserir nova conta na tabela accounts
+    MySQLComp.SetQuery('INSERT INTO accounts (username, password_hash, mail, last_token_creation_time, ' +
+      'nation, isactive, account_status, account_type, storage_gold, cash, ip_created, time_created, premium_time, ban_days, playtime) ' +
+      'VALUES (' +
+      QuotedStr(NewUsername) + ', ' +
+      QuotedStr(TFunctions.StringToMd5(NewPassword)) + ', ' +
+      QuotedStr(NewEmail) + ', ' +
+      QuotedStr('01/01/0001 00:00:01') + ', ' +  // last_token_creation_time
+      '2, ' +            // nation (valor padrão 2)
+      QuotedStr('1') + ', ' + // isactive (1 = ativo)
+      '0, ' +            // account_status (0 = normal)
+      IntToStr(AccountType) + ', ' + // account_type
+      '0, ' +            // storage_gold
+      '0, ' +            // cash
+      QuotedStr('::0') + ', ' + // ip_created (endereço IP padrão)
+      '1, ' +            // time_created (tempo padrão, pode ser ajustado)
+      QuotedStr('01/01/0001 00:00:01') + ', ' + // premium_time
+      '0, ' +            // ban_days (0 = não banido)
+      '0)');             // playtime (0 = novo)
+
+    try
+      MySQLComp.Query.Connection.StartTransaction; // Inicia a transação
+      MySQLComp.Run(False); // Executa a inserção no banco de dados
+      MySQLComp.Query.Connection.Commit; // Confirma a transação
+
+      ShowMessage('Conta criada com sucesso!');
+    except
+      on E: Exception do
+      begin
+        MySQLComp.Query.Connection.Rollback; // Reverte a transação em caso de erro
+        ShowMessage('Erro ao criar conta: ' + E.Message);
+      end;
+    end;
+
   finally
-    HTTP.Free;
-    SSL.Free;
+    MySQLComp.Free;
   end;
 end;
 

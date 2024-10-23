@@ -152,7 +152,7 @@ object frmSendPacket: TfrmSendPacket
     Top = 8
     Width = 713
     Height = 368
-    ActivePage = Server
+    ActivePage = accCreate
     TabOrder = 0
     object Server: TTabSheet
       Caption = 'Server'
@@ -256,7 +256,7 @@ object frmSendPacket: TfrmSendPacket
         object GroupBox1: TGroupBox
           Left = 102
           Top = 24
-          Width = 67
+          Width = 155
           Height = 81
           Color = clBlack
           ParentBackground = False
@@ -407,7 +407,7 @@ object frmSendPacket: TfrmSendPacket
         Left = 16
         Top = 16
         Width = 209
-        Height = 209
+        Height = 249
         Caption = 'Criar Conta de Usuario'
         TabOrder = 0
         object lblUsuario: TLabel
@@ -426,10 +426,17 @@ object frmSendPacket: TfrmSendPacket
         end
         object lblTupoConta: TLabel
           Left = 16
-          Top = 116
+          Top = 156
           Width = 71
           Height = 13
           Caption = 'Tipo de Conta:'
+        end
+        object lblEmail: TLabel
+          Left = 16
+          Top = 116
+          Width = 28
+          Height = 13
+          Caption = 'Email:'
         end
         object edtNewUsername: TEdit
           Left = 16
@@ -447,7 +454,7 @@ object frmSendPacket: TfrmSendPacket
         end
         object btnCreateAccount: TButton
           Left = 102
-          Top = 160
+          Top = 208
           Width = 75
           Height = 25
           Caption = 'Criar Conta'
@@ -456,7 +463,7 @@ object frmSendPacket: TfrmSendPacket
         end
         object cbTypeAccount: TComboBox
           Left = 16
-          Top = 133
+          Top = 173
           Width = 161
           Height = 21
           Style = csDropDownList
@@ -465,6 +472,13 @@ object frmSendPacket: TfrmSendPacket
             'GM'
             'Normal'
             'Bloqueado')
+        end
+        object edtNewEmail: TEdit
+          Left = 16
+          Top = 135
+          Width = 161
+          Height = 21
+          TabOrder = 4
         end
       end
     end

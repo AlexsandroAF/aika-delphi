@@ -9779,6 +9779,7 @@ begin
   Self.SendPacket(Packet, Packet.Header.size);
 end;
 {$ENDREGION}
+
 {$REGION 'Dungeons'}
 
 procedure TPlayer.SendDungeonLobby(InParty: Boolean; Dungeon, Dificult: BYTE);
